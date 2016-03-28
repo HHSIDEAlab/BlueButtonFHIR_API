@@ -1,12 +1,14 @@
 
 from oauth2_provider.decorators import protected_resource
+
 from django.views.decorators.http import require_POST
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
-from .create import create
-from .update import update
-from .read import read
+
+from fhir.views.create import create
+from fhir.views.update import update
+from fhir.views.read import read
 
 #@require_POST
 @login_required()

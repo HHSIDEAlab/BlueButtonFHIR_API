@@ -3,17 +3,21 @@
 
 from django.conf.urls import patterns, include, url
 
-from .views.create import create
-from .views.rud import read_or_update_or_delete
-from .views.search import search
-from .views.history import history, vread
-from .views.hello import hello
-from .views.oauth import oauth_create, oauth_update
+from fhir.views.create import create
+from fhir.views.rud import read_or_update_or_delete
+from fhir.views.search import search
+from fhir.views.history import history, vread
+from fhir.views.hello import hello
+from fhir.views.oauth import oauth_create, oauth_update
 
+from django.contrib import admin
 
-urlpatterns = patterns('',    
+admin.autodiscover()
+
+urlpatterns = [
     
     #Hello
+
     url(r'hello', hello,
         name='fhir_hello'),
 
@@ -48,8 +52,7 @@ urlpatterns = patterns('',
     url(r'(?P<resource_type>[^/]+)/(?P<id>[^/]+)',
         read_or_update_or_delete,
         name='fhir_read_or_update_or_delete'),
-    
-    
+
 
     #Create  POST ------------------------------
     url(r'(?P<resource_type>[^/]+)', create,
@@ -59,11 +62,5 @@ urlpatterns = patterns('',
     #Search  GET ------------------------------
     url(r'(?P<resource_type>[^/]+)?', search,
         name='fhir_search'),
-    
 
-
-
-
-
-    
-    )
+    ]

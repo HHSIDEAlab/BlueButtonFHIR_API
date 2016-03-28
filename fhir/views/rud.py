@@ -1,10 +1,12 @@
 from django.shortcuts import render
-from ..utils import kickout_404, kickout_400, kickout_500
-from .update import update
-from .delete import delete
-from .read import read
-from django.views.decorators.csrf import csrf_exempt
 
+from fhir.settings import DF_EXTRA_INFO
+from fhir.utils import kickout_404, kickout_400, kickout_500
+from fhir.views.update import update
+from fhir.views.delete import delete
+from fhir.views.read import read
+
+from django.views.decorators.csrf import csrf_exempt
 
 
 @csrf_exempt

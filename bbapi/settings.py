@@ -22,12 +22,14 @@ PARSE_INI = RawConfigParser()
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
-import ast
+import json
 # import sys
 from platform import python_version
 from .utils import (str2bool,
                     str2int,
-                    CurrentUserMiddleware)
+                    CurrentUserMiddleware,
+                    Server_Ip,
+                    Server_Name)
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
@@ -43,7 +45,7 @@ APPLICATION_ROOT = BASE_DIR
 # email_host = box905.bluehost.com
 #
 
-CONFIG_FILE = 'local.ini'
+CONFIG_FILE = 'bbapi/local_ini/local.ini'
 # Read the config file
 PARSE_INI.read_file(open(os.path.join(APPLICATION_ROOT, CONFIG_FILE)))
 # Then use PARSE_INI.get(SECTION, VARIABLE) to read in value
@@ -78,7 +80,22 @@ DEBUG = str2bool(PARSE_INI.get('global', 'debug'))
 
 DEBUG_SETTINGS = str2bool(PARSE_INI.get('global', 'debug_settings'))
 
-ALLOWED_HOSTS = []
+# Get the Server Domain Name. eg. dev.bbonfhir.com
+# ie the server name to address this app
+DOMAIN = PARSE_INI.get('global', 'domain')
+
+if DEBUG:
+    ALLOWED_HOSTS = []
+
+else:
+    ALLOWED_HOSTS = PARSE_INI.get('global', 'allowed_hosts').split(',')
+    ALLOWED_HOSTS.append(DOMAIN)
+    ALLOWED_HOSTS.append(Server_Ip())
+
+    # ALLOWED_HOSTS = ['.bbonfhir.com',
+    #                  'localhost',
+    #                  '127.0.0.1',
+    #                  DOMAIN]
 ADMINS = (
     ('Mark Scrimshire', 'mark@ekivemark.com'),
 )
@@ -89,15 +106,21 @@ APPLICATION_TITLE = PARSE_INI.get('global', 'application_title')
 if APPLICATION_TITLE == "":
     APPLICATION_TITLE = "BB+ Developer Accounts"
 
+FULL_CONFIG_FILE = APPLICATION_ROOT.strip() + '/' + CONFIG_FILE
+
 if DEBUG_SETTINGS:
+    print("")
+    print("==================================================================")
+    print("==================================================================")
+    print("==================================================================")
     print("Application: ", APPLICATION_TITLE)
     print("Running on Python_version: ", python_version())
     print("")
     print("BASE_DIR:", BASE_DIR)
     print("APPLICATION_ROOT:", APPLICATION_ROOT)
-    FULL_CONFIG_FILE = APPLICATION_ROOT.strip() + '/' + CONFIG_FILE
     print("Config File: ", FULL_CONFIG_FILE)
-
+    print("ALLOWED_HOSTS:", ALLOWED_HOSTS)
+    print("Running on:", Server_Name(),"[", Server_Ip(),"]")
 # Application definition
 
 TEMPLATES = [
@@ -148,8 +171,9 @@ TEMPLATES = [
 # TEMPLATE_LOADERS = ()
 
 DEFAULT_APPS = (
-    # django_admin_bootstrapped Must appear ahead of django.contrib.admin
-    'django_admin_bootstrapped',
+    # django_admin_bootstrapped Must appear ahead of django.contrib.admin_disable
+    #'django_admin_bootstrapped',
+    'flat',
     'django.contrib.admin',
     'django.contrib.admindocs',
     # add django.contrib.auth to support django registration
@@ -160,6 +184,7 @@ DEFAULT_APPS = (
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # 'mod_wsgi.server',
 )
 
 THIRD_PARTY_APPS = (
@@ -173,11 +198,13 @@ THIRD_PARTY_APPS = (
     'oauth2_provider',
     'corsheaders',
     'django_python3_ldap',
+    # 'jsonschema',
+    # 'PIL',
     'debug_toolbar',
     # 'ldap3',
     'requests',
-    'fhir',
     'fhir_io_hapi',
+    'fhir',
 )
 ###############
 # IMPORTANT: If running on Apache you need to
@@ -196,11 +223,13 @@ LOCAL_APPS = (
     # 'apps.secretqa',
     'apps.api',
     'apps.v1api',
+    'apps.setup',
     # 'apps.npi_upload',
     # 'apps.getbb',
     # 'apps.eob_upload',
     # 'apps.bluebutton',
     #'fhir_io_hapi',
+    'bbapi',
 )
 
 INSTALLED_APPS = DEFAULT_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -231,6 +260,9 @@ MIDDLEWARE_CLASSES = (
     'debug_toolbar.middleware.DebugToolbarMiddleware',
 )
 
+# django-guardian requires an ANONYMOUS_USER_ID setting
+ANONYMOUS_USER_ID = -1
+
 ROOT_URLCONF = 'bbapi.urls'
 
 # Moved wsgi.py to apache2 sub-directory for better security protection
@@ -239,34 +271,31 @@ WSGI_APPLICATION = 'bbapi.apache2.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/1.7/ref/settings/#databases
 DBPATH = os.path.join(BASE_DIR, 'db/db.db')
-if DEBUG_SETTINGS:
-    print("DBPATH:", DBPATH)
-
-
 # Standard sqlite3 settings
-
 DB_PLATFORM = PARSE_INI.get('global', 'db_platform')
 if DEBUG_SETTINGS:
     print("DB Platform:", DB_PLATFORM)
     # postgresql_psycopg2
 if DB_PLATFORM == "postgresql_psycopg2":
-    print("Setting up Database with:", DB_PLATFORM)
     DATABASES = {
         'default' : {
             'ENGINE' : 'django.db.backends.postgresql_psycopg2',
             # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
-            'NAME' : 'bbonfhiruser',  # Or path to database file if using sqlite3.
-            'USER' : 'bluebadmin',  # Not used with sqlite3.
-           'PASSWORD' : 'whisky-Washington9876',  # Not used with sqlite3.
-            'HOST' : '172.31.13.249',
+            'NAME' : 'bbonfhirapi',  # Or path to database file if using sqlite3.
+            'USER' : 'bbonfhirapiuser',  # Not used with sqlite3.
+           'PASSWORD' : 'brandy-Baltimore9876',  # Not used with sqlite3.
+            'HOST' : '172.31.13.249', # Private IP
+            # 'HOST' : '52.4.201.182', # Public IP
             # Set to empty string for localhost. Not used with sqlite3.
             'PORT' : '5432',
             # Set to empty string for default. Not used with sqlite3.
         }
     }
+elif DB_PLATFORM == "by_local_ini":
+    defn_dict = PARSE_INI.get('global', 'databases_defn')
+    DATABASES = eval(defn_dict)
+
 else: #  DB_PLATFORM == "sqlite3":
-    if DEBUG_SETTINGS:
-        print('Setting up Database', DB_PLATFORM)
     DATABASES = {
         'default' : {
             'ENGINE' : 'django.db.backends.sqlite3',
@@ -281,6 +310,15 @@ else: #  DB_PLATFORM == "sqlite3":
         }
     }
 
+
+if DEBUG_SETTINGS:
+    print("Database Definition:", DB_PLATFORM)
+    print("Database Config -",
+          " Engine:", DATABASES['default']['ENGINE'],
+          " Name:", DATABASES['default']['NAME'],
+          " User:", DATABASES['default']['USER'],
+          " Host:", DATABASES['default']['HOST'],
+          " Port:",DATABASES['default']['PORT'])
 # Plan on sqlite3 for development environment
 # Use Postgresql for Production
 
@@ -298,10 +336,6 @@ USE_I18N = True
 USE_L10N = True
 
 USE_TZ = True
-
-# Get the Server Domain Name. eg. dev.bbonfhir.com
-# ie the server name to address this app
-DOMAIN = PARSE_INI.get('global', 'domain')
 
 if DEBUG_SETTINGS:
     print("Check the valid site id in the site table")
@@ -325,10 +359,10 @@ if DEBUG_SETTINGS:
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.7/howto/static-files/
 
-# URL prefix for admin static files -- CSS, JavaScript and images.
+# URL prefix for admin_disable static files -- CSS, JavaScript and images.
 # Make sure to use a trailing slash.
-# Examples: "http://foo.com/static/admin/", "/static/admin/".
-ADMIN_MEDIA_PREFIX = '/static/admin/'
+# Examples: "http://foo.com/static/admin/", "/static/admin_disable/".
+ADMIN_MEDIA_PREFIX = '/static/admin_disable/'
 
 # Additional locations of static files
 STATICFILES_DIRS = (
@@ -348,7 +382,7 @@ STATICFILES_FINDERS = (
 
 STATIC_URL = '/static/'
 
-STATIC_ROOT = '/var/www/html/dev.bbonfhir.com/'
+STATIC_ROOT = '/var/www/html/'+DOMAIN+'/'
 
 SESSION_COOKIE_SECURE = False
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
@@ -367,7 +401,7 @@ except:
 REGISTRATION_AUTO_LOGIN = str2bool(PARSE_INI.get('global',
                                                  'registration_auto_login'))
 
-# REGISTRATION_FORM = 'accounts.admin.UserCreationForm'
+# REGISTRATION_FORM = 'accounts.admin_disable.UserCreationForm'
 
 # Django Registration
 # EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -420,11 +454,10 @@ DEFAULT_FROM_EMAIL = PARSE_INI.get('global',
                                    'default_from_email')
 
 if DEBUG_SETTINGS:
-    print("Email via %s: %s" % (EMAIL_BACKEND_TYPE, EMAIL_BACKEND))
+    print("Email via %s[%s]" % (EMAIL_BACKEND,EMAIL_BACKEND_TYPE))
     print("Account Activation Days: %s" % ACCOUNT_ACTIVATION_DAYS)
     print("Email Host:Port: %s:%s" % (EMAIL_HOST, EMAIL_PORT))
-    print(
-        "Credentials: [%s]/[%s]" % (EMAIL_HOST_USER,
+    print("Credentials: [%s]/[%s]" % (EMAIL_HOST_USER,
                                     EMAIL_HOST_PASSWORD))
 
 # END of DJANGO Registration Settings Section
@@ -443,10 +476,12 @@ OAUTH2_PROVIDER_APPLICATION_MODEL='appmgmt.BBApplication'
 
 OAUTH2_PROVIDER = {
     #'APPLICATION_MODEL': 'appmgmt.BBApplication',
-    'READ_SCOPE': 'read',
+    'READ_SCOPE': 'patient/*.read',
     #'SCOPES': {"read": "Reading scope", "write": "Writing scope"},
-    'SCOPES': {"read": "Download my claims data and bluebutton profile information", "write_consent": "Record my consent to send data to this app"},
+    'SCOPES': {"patient/*.read": "Download my claims data and bluebutton profile information", "write_consent": "Record my consent to send data to this app"},
 }
+# scope := permission/resource.access
+# http://openid.bitbucket.org/HEART/openid-heart-fhir-oauth2.html
 
 # Configure Django Rest Framework to use OAuth2_Provider Toolkit
 REST_FRAMEWORK = {
@@ -463,39 +498,14 @@ INTERNAL_IPS = '127.0.0.1'
 SHOW_TOOLBAR_CALLBACK = 'debug_toolbar.middleware.show_toolbar'
 
 if DEBUG_SETTINGS:
-    print("Django Debug Toolbar")
-    print("Internal IPs", INTERNAL_IPS)
-    print("Debug:", DEBUG)
-
+    print("Django Debug Toolbar:%s on %s" % (DEBUG, INTERNAL_IPS))
 
 # Django 1.6+ implement a new test runner
 # Suppress error 1_6.W001 by adding:
 TEST_RUNNER = 'django.test.runner.DiscoverRunner'
 
-# Get Local Settings that you want to keep private.
-# Make sure Local_settings.py is excluded from Git
-# try:
-#     from bbonfhiruser.local_settings import *
-# except Exception as e:
-#     print("ERROR: local_settings not loaded")
-#     pass
-
 # SETTINGS EXPORT for django-settings-export context processor
 # Explicitly define settings to Export for use in {{ Template Values }}
-
-# Get a file name that stores words we will use to create fake accounts
-# WORD_LIST = PARSE_INI.get('global', 'word_dictionary').strip()
-# WORD_LIST = BASE_DIR + "/words/" + WORD_LIST
-#
-# if DEBUG_SETTINGS:
-#     print("===================================")
-#     print("Testing for Word List:", WORD_LIST)
-#     FWL = open(WORD_LIST)
-#     XLEN = 80
-#     for y in range(2):
-#         line = FWL.readline(XLEN)
-#         print(y, ":", line[:-1])
-#     print("=============================")
 
 DEFAULT_VALID_DAYS = 365
 
@@ -535,14 +545,23 @@ SETTINGS_EXPORT = [
 ]
 
 if DEBUG_SETTINGS:
-    print("SECRET_KEY:%s" % SECRET_KEY)
-    print(
-        "================================================================")
+    print("KEY:%s" % SECRET_KEY)
+    print("================================================================")
 # SECURITY WARNING: keep the secret key used in production secret!
 
-#######################################
-#######################################
-# django-auth-ldap
+####
+# POET Trust Section
+#
+####
+# POET_CONF = {
+#        'MODE': "AUTO_TRUST",
+#        # MODE options are AUTO_TRUST, CHECK
+#        # defaults to CHECK
+#         }
+POET_CONF = {
+    'MODE': "AUTO_TRUST",
+}
+
 
 ####
 # Remote LDAP Check in accounts.views.ldap.validate_ldap_user
@@ -577,11 +596,18 @@ LDAP_AUTH_USER_FIELDS = {
 LDAP_AUTH_GET_FIELDS = ["cn", "uid", "givenName",
                         "sn", "mail"]
 
-
 # BeautifulSoup
 BS_PARSER = 'lxml'
 
-FHIR_SERVER = PARSE_INI.get('global', 'fhir_server')
+fhir_dict = PARSE_INI.get('global', 'fhir_server_configuration')
+FHIR_SERVER_CONF = eval(fhir_dict)
+# FHIR_SERVER_CONF = {
+#         'SERVER': "http://fhir.bbonfhir.com",
+#         'PATH': "/fhir-p",
+#         'RELEASE': "/baseDstu2",
+#         }
+
+FHIR_SERVER = FHIR_SERVER_CONF['SERVER'] + FHIR_SERVER_CONF['PATH']
 if FHIR_SERVER == '':
     FHIR_SERVER = 'http://fhir.bbonfhir.com/fhir-p'
     # FHIR_SERVER = 'http://localhost:8080/fhir-p'
@@ -601,15 +627,17 @@ else:
 DJANGO_FHIR_CONFIG = {
     # Overwrite default pluggable database module
     "DF_APPS": ('fhir_io_hapi',),
+    "DF_EXTRA_INFO": False,
 }
 
-
 if DEBUG_SETTINGS:
+    print("FHIR_SERVER_CONF:", FHIR_SERVER_CONF)
     print("FHIR_SERVER:", FHIR_SERVER)
-    print("AUTH_LDAP_SERVER_URI:", AUTH_LDAP_SERVER_URI)
-    print("AUTH_LDAP_SCOPE:", AUTH_LDAP_SCOPE)
-#     print("REMOTE_LDAP_CHECK:", REMOTE_LDAP_CHECK)
-#
+    print("LDAP Authentication:", REMOTE_LDAP_CHECK)
+    if REMOTE_LDAP_CHECK:
+        print("AUTH_LDAP_SERVER_URI:", AUTH_LDAP_SERVER_URI)
+        print("AUTH_LDAP_SCOPE:", AUTH_LDAP_SCOPE)
+
 #     if REMOTE_LDAP_CHECK:
 #         SRVR = Server(AUTH_LDAP_SERVER_URI, get_info=ALL)
 #         try:
@@ -641,15 +669,22 @@ if DEBUG_SETTINGS:
 #             for r in CNCT.response:
 #                 print(r['dn'], r['attributes'])
 #
-    print("=========================================")
+
+print("=========================================")
 MEDIA_URL = "/media/"
 if DB_PLATFORM == 'sqlite3':
     MEDIA_ROOT = "/Users/mark/PycharmProjects/media/bb/"
 else:
     MEDIA_ROOT = "/data/pyapps/media/"
 
+# Simple check for Code Version
+VERSION_INFO = "1.2.1"
+
 if DEBUG_SETTINGS:
+    print("Version:", VERSION_INFO)
     print("FHIR_SERVER:", FHIR_SERVER)
     print("MEDIA_URL:", MEDIA_URL)
     print("MEDIA_ROOT:", MEDIA_ROOT)
+    print("POET_CONF:", POET_CONF)
     print("=========================================")
+

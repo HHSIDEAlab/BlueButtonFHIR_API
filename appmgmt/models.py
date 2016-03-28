@@ -4,11 +4,16 @@
 # Extend the Django OAuth Provider Application Model
 # Author: Mark Scrimshire (c) @ekivemark
 
+import json
+
+from collections import OrderedDict
+
 from django.conf import settings
 from django.db import models
 from oauth2_provider.models import AbstractApplication
 from accounts.choices import DEVELOPER_ROLE_CHOICES
-
+from .choices import APPLICATION_TYPE_CHOICES
+from .utils import write_fhir, build_fhir_id
 
 # Modify settings.py wih OAUTH2_PROVIDER_APPLICATION_MODEL=
 
@@ -53,8 +58,103 @@ class BBApplication(AbstractApplication):
                                       blank=True,
                                       null=True,
                                       default=None)
+    app_type = models.CharField(max_length=8,
+                                choices=APPLICATION_TYPE_CHOICES,
+                                verbose_name="Application Type",
+                                blank=True,
+                                null=True)
     privacy_url = models.URLField(blank=True)
     support_url = models.URLField(blank=True)
+
+    fhir_reference = models.CharField(max_length=60,
+                                      blank=True,
+                                      null=True)
+
+    # We should create/update a FHIR Device resource each time the Application record is
+    # saved.
+
+    # {
+    #   "resourceType" : "Device",
+    #   "identifier" : [{ Identifier }], // Client_Id
+    #   "type" : { CodeableConcept }, // app_type
+    #   "status" : "<code>", // available | not-available | entered-in-error
+    #   "manufacturer" : "<string>", // Name of device manufacturer
+    #   "model" : "<string>", // Model id assigned by the manufacturer
+    #   "version" : "<string>", // Version number (i.e. software)
+    #   "expiry" : "<dateTime>", // Date and time of expiry of this device (if applicable)
+
+    #   "owner" : { Reference(Organization) }, // Organization responsible for device
+    #   "location" : { Reference(Location) }, // Where the resource is found
+    #   "contact" : [{ ContactPoint }], // Details for human/organization for support
+    #   "url" : "<uri>" // Network address to contact device
+    # }
+
+    # on 201 Created write FHIR_reference using response header location field content
+    # Otherwise use FHIR_Reference to update record on fhir server when application is updated
+
+    def save(self, *args, **kwargs):
+
+        if self.fhir_reference is "":
+            if settings.DEBUG:
+                print("Overriding BBApplication save")
+
+            mode = "POST"
+        else:
+            mode = "PUT"
+        self.fhir_reference = self.build_fhir(self, *args, **kwargs)
+
+        super(BBApplication, self).save(*args, **kwargs)
+
+
+    def build_fhir(self, *args, **kwargs):
+        # Create a FHIR Device Record
+        result = False
+
+        if self.fhir_reference == "":
+            mode = "POST"
+
+        else:
+            mode = "PUT"
+
+        resource = OrderedDict()
+        resource['resourceType'] = "Device"
+        resource['identifier'] = [build_fhir_id("system", settings.DOMAIN,
+                                  "type", {"text": "BBApplication"},
+                                  "value", str(self.id))]
+        resource['type'] = {"text": self.get_app_type_display()}
+        if self.agree:
+            resource['status'] = "available"
+        else:
+            resource['status'] = "not-available"
+        resource['manufacturer'] = self.organization.name
+        resource['model'] = self.name
+
+        org = OrderedDict()
+        org['resourceType'] = "Organization"
+
+        id_info_1 = OrderedDict()
+        id_info_1['system'] = settings.DOMAIN
+        id_info_1['type'] = {"text": "Organization"}
+        id_info_1['value'] = str(self.organization_id)
+
+
+        org['identifier'] = [build_fhir_id("system", settings.DOMAIN,
+                              "type", {"text": "Organization"},
+                              "value", str(self.organization_id)),
+                             build_fhir_id("system", "FHIR",
+                              "type", {"text": "Developer Organization"},
+                              "value", self.organization.fhir_reference)]
+        resource['organization'] = org
+
+        resource['url'] = self.support_url
+
+        result = write_fhir(mode,
+                            "Device",
+                            json.dumps(resource),
+                            self.fhir_reference)
+
+        return result
+
 
     def privacy(self):
         return self.privacy_url
@@ -69,7 +169,7 @@ class BBApplication(AbstractApplication):
             return terms
         return None
 
-    def admin_list():
+    def admin_list(self):
         return ('user', 'client_id', 'client_secret',)
 
 
@@ -89,6 +189,78 @@ class Organization(models.Model):
     domain = models.URLField(unique=True)
     trusted = models.BooleanField(default=False)
     trusted_since = models.DateTimeField(blank=True, null=True)
+
+    fhir_reference = models.CharField(max_length=60,
+                                      blank=True,
+                                      null=True)
+
+    # We need to write an Organization Profile to FHIR and update FHIR_Reference
+# {
+#   "resourceType" : "Organization",
+#   // from Resource: id, meta, implicitRules, and language
+#   // from DomainResource: text, contained, extension, and modifierExtension
+#   "identifier" : [{ Identifier }], // C? Identifies this organization  across multiple systems
+#   "active" : <boolean>, // Whether the organization's record is still in active use
+#   "type" : { CodeableConcept }, // Kind of organization
+#   "name" : "<string>", // C? Name used for the organization
+#   "telecom" : [{ ContactPoint }], // C? A contact detail for the organization
+#   "address" : [{ Address }], // C? An address for the organization
+#   "partOf" : { Reference(Organization) }, // The organization of which this organization forms a part
+#   "contact" : [{ // Contact for the organization for a certain purpose
+#     "purpose" : { CodeableConcept }, // The type of contact
+#     "name" : { HumanName }, // A name associated with the contact
+#     "telecom" : [{ ContactPoint }], // Contact details (telephone, email, etc.)  for a contact
+#     "address" : { Address } // Visiting or postal addresses for the contact
+#   }]
+# }
+
+    # On 201 Created write FHIR_reference using response header location field content
+    # Otherwise use FHIR_Reference to update record on fhir server when application is updated
+
+
+    def save(self, *args, **kwargs):
+
+        if self.fhir_reference is "":
+            if settings.DEBUG:
+                print("Overriding Organization save")
+
+            mode = "POST"
+        else:
+            mode = "PUT"
+        self.fhir_reference = self.build_fhir(self, *args, **kwargs)
+
+        super(Organization, self).save(*args, **kwargs)
+
+
+    def build_fhir(self, *args, **kwargs):
+        # Create a FHIR Organization Record
+        result = False
+
+        if self.fhir_reference == "":
+            mode = "POST"
+
+        else:
+            mode = "PUT"
+
+        resource = OrderedDict()
+        resource['resourceType'] = "Organization"
+        resource['identifier'] = [build_fhir_id("system", settings.DOMAIN,
+                                  "type", {"text": "Organization"},
+                                  "value", str(self.id))]
+        resource['type'] = {"text": "Developer Organization"}
+        resource['name'] = self.name
+        telecom = OrderedDict()
+        telecom['resourceType'] = "ContactPoint"
+        telecom['system'] = "domain"
+        telecom['value'] = self.domain
+        resource['telecom'] = [telecom,]
+
+        result = write_fhir(mode,
+                            "Organization",
+                            json.dumps(resource),
+                            self.fhir_reference)
+
+        return result
 
     def __str__(self):
         return self.name
@@ -160,3 +332,5 @@ class Developer(models.Model):
             return "Changing this damn field name %s" % u.username
         except:
             return "No assigned member"
+
+

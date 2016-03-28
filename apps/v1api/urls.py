@@ -23,38 +23,77 @@ from apps.v1api.views.home import *
 from apps.v1api.views.patient import (get_patient,
                                       get_eob,
                                       get_eob_view,)
+
 from apps.v1api.views.ogets import (Hello,
-                                    patient,
-                                    Patients,)
+                                    o_patient,
+                                    Patients,
+                                    o_explanationofbenefit,
+                                    open_patient,
+                                    open_explanationofbenefit)
+
+from apps.v1api.views.apidocs import (ResourceTypeList,
+                                      ResourceControlList)
+
+from apps.v1api.views.eob import (ExplanationOfBenefit,
+                                  PatientExplanationOfBenefit)
 
 admin.autodiscover()
 
-urlpatterns = patterns('',
+urlpatterns = [
                        # Examples: These are used by sub-accounts
                        # or master accounts
-                       url(r'^$', 'apps.v1api.views.home.api_index',
+                       url(r'^$', api_index,
                            name='home'),
-                       url(r'^patient$',
-                           'apps.v1api.views.patient.get_patient',
+
+                       #url(r'^Patient$/(?P<patient_id>[-\w]+)$',
+                       url(r'^Patient/(?P<patient_id>\w+|)$',
+                           get_patient,
+                           name='patient_by_id'),
+                       url(r'^Patient$',
+                           get_patient,
                            name='patient'),
+
                        url(r'^eob/',
-                           'apps.v1api.views.patient.get_eob',
+                           get_eob,
                            name='eob'),
-                       url(r'^ExplanationOfBenefit/',
-                           'apps.v1api.views.eob.ExplanationOfBenefit',
+                       url(r'^ExplanationOfBenefit$',
+                           ExplanationOfBenefit,
                            name='ExplanationOfBenefit'),
                        url(r'^eobview/(?P<eob_id>[-\w]+)$',
-                           'apps.v1api.views.patient.get_eob_view',
+                           get_eob_view,
                            name='eobview'),
+
+                       url(r'^PatientExplanationOfBenefit/(?P<patient_id>[-\w]+)$',
+                           PatientExplanationOfBenefit,
+                           name='PatientExplanationOfBenefit_by_id'),
+
+                       url(r'^PatientExplanationOfBenefit$',
+                           PatientExplanationOfBenefit,
+                           name='PatientExplanationOfBenefit'),
+
                        # OAuth entry points are here
                        # These will only be used by OAuth authorized apps
                        # These are the resource servers
                        url(r'^o/hello', Hello.as_view()),
-                       url(r'^o/Patients/(?P<patient_id>\w+|)$', Patients.as_view(), name='fhir_patient'),
+
+                       url(r'^open/Patient/(?P<patient_id>\w+|)$', open_patient, name='open_patient'),
 
                        # Add more oauth endpoints here
-                       url(r'^o/patient', 'apps.v1api.views.ogets.patient'),
+                       #url(r'^o/Patient/(?P<patient_id>\w+|)$', Patients.as_view(), name='fhir_patient'),
+                       url(r'^o/Patient/(?P<patient_id>\w+|)$', o_patient, name='fhir_patient'),
+                       url(r'^o/Patient', o_patient),
 
+                       url(r'^o/ExplanationOfBenefit$', o_explanationofbenefit),
+
+                       url(r'^open/ExplanationOfBenefit$', open_explanationofbenefit),
+
+                       # Resources
+                       url(r'^resourcetype',ResourceTypeList.as_view(),
+                           name = "resourcetype"),
+
+                       url(r'^resourcecontrol',ResourceControlList.as_view(),
+                           name="resourcecontrol"),
+                       # Admin
                        url(r'^admin/', include(admin.site.urls)),
 
-                       )
+                       ]

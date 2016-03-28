@@ -1,11 +1,17 @@
 from django.shortcuts import render
-from ..models import SupportedResourceType
+from fhir.models import SupportedResourceType
 from collections import OrderedDict
 from django.http import HttpResponse
+
 import json
+
 from django.views.decorators.csrf import csrf_exempt
-from ..utils import (kickout_403, kickout_404)
-from .utils import check_access_interaction_and_resource_type
+
+from fhir.utils import (kickout_403, kickout_404)
+from fhir.views.utils import check_access_interaction_and_resource_type
+
+from fhir.settings import FHIR_BACKEND_DELETE, DF_EXTRA_INFO
+
 @csrf_exempt
 def delete(request, resource_type, id):
     """Delete FHIR Interaction"""
@@ -17,12 +23,18 @@ def delete(request, resource_type, id):
     if deny:
         #If not allowed, return a 4xx error.
         return deny
+
+    #testing direct response
+    return FHIR_BACKEND_DELETE.delete(request, resource_type, id)
+
     
     od = OrderedDict()
-    od['request_method']= request.method
-    od['interaction_type'] = interaction_type
+    if DF_EXTRA_INFO:
+        od['request_method']= request.method
+        od['interaction_type'] = interaction_type
     od['resource_type']    = resource_type
     od['id'] = id
-    od['note'] = "This is only a stub for future implementation"
+    if DF_EXTRA_INFO:
+        od['note'] = "This is only a stub for future implementation"
     return HttpResponse(json.dumps(od, indent=4),
                         content_type="application/json")
